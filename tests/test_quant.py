@@ -42,3 +42,28 @@ def test_hqq_levels_and_not_worse_than_rtn():
     e_hqq = (W - Q).abs().mean().item()
     e_rtn = (W - quant.rtn(W, 4, 32)).abs().mean().item()
     assert e_hqq <= e_rtn * 1.05
+
+
+def correlated_inputs(n=512, inp=128, seed=2):
+    g = torch.Generator().manual_seed(seed)
+    base = torch.randn(n, 8, generator=g)
+    mix = torch.randn(8, inp, generator=g)
+    return base @ mix + 0.1 * torch.randn(n, inp, generator=g)
+
+
+def test_gptq_beats_rtn_on_output_error():
+    W = heavy_tailed(seed=3)
+    X = correlated_inputs()
+    H = 2 * X.T @ X / X.shape[0]
+    Q = quant.gptq(W, H, bits=3, group=32)
+    assert levels_per_group(Q, 32) <= 8
+    out_err = lambda Wq: (X @ (W - Wq).T).pow(2).mean().item()
+    assert out_err(Q) < out_err(quant.rtn(W, 3, 32))
+
+
+def test_gptq_handles_dead_inputs():
+    W = heavy_tailed(seed=4)
+    X = correlated_inputs()
+    X[:, 5] = 0
+    Q = quant.gptq(W, 2 * X.T @ X / X.shape[0], bits=4, group=32)
+    assert torch.isfinite(Q).all()

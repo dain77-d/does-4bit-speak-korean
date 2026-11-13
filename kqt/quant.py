@@ -54,3 +54,34 @@ def hqq(W: torch.Tensor, bits: int, group: int = 128, iters: int = 20, beta: flo
         beta *= kappa
     Wq = torch.round(Wg * inv_s + best_zero).clamp(0, qmax)
     return ((Wq - best_zero) / inv_s).reshape(W.shape).to(W.dtype)
+
+
+def gptq(W: torch.Tensor, H: torch.Tensor, bits: int, group: int = 128, percdamp: float = 0.01) -> torch.Tensor:
+    """GPTQ (Frantar et al. 2023). Static min-max params per group, computed when the group's block starts;
+    block size equals group size so every group is quantized from already error-corrected weights."""
+    dtype = W.dtype
+    W = W.float().clone()
+    H = H.float().clone()
+    cols = W.shape[1]
+    assert cols % group == 0, f"in_features {cols} not divisible by group {group}"
+    dead = torch.diag(H) == 0
+    H[dead, dead] = 1
+    W[:, dead] = 0
+    H += percdamp * torch.mean(torch.diag(H)) * torch.eye(cols, device=W.device)
+    Hinv = torch.linalg.cholesky(torch.cholesky_inverse(torch.linalg.cholesky(H)), upper=True)
+    Q = torch.zeros_like(W)
+    for i1 in range(0, cols, group):
+        i2 = i1 + group
+        W1 = W[:, i1:i2].clone()
+        Err1 = torch.zeros_like(W1)
+        Hinv1 = Hinv[i1:i2, i1:i2]
+        scale, zero, qmax = _minmax_params(W1, bits)
+        for i in range(group):
+            w = W1[:, i:i + 1]
+            q = _fake(w, scale, zero, qmax)
+            Q[:, i1 + i] = q[:, 0]
+            err = (w - q) / Hinv1[i, i]
+            W1[:, i:] -= err @ Hinv1[i:i + 1, i:]
+            Err1[:, i] = err[:, 0]
+        W[:, i2:] -= Err1 @ Hinv[i1:i2, i2:]
+    return Q.to(dtype)
