@@ -1,4 +1,5 @@
 """Data loading and deterministic splits. load_* need network + `datasets` (run on Kaggle)."""
+import itertools
 import random
 
 import torch
@@ -66,4 +67,5 @@ def load_wiki(lang, n_docs=3000):
     from datasets import load_dataset
 
     ds = load_dataset("wikimedia/wikipedia", f"20231101.{lang}", split="train", streaming=True)
-    return [r["text"] for _, r in zip(range(n_docs), ds) if len(r["text"]) > 500]
+    long_docs = (r["text"] for r in ds if len(r["text"]) > 500)
+    return list(itertools.islice(long_docs, n_docs))
