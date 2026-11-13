@@ -32,3 +32,13 @@ def test_rtn_error_decreases_with_bits():
 def test_rtn_rejects_bad_group():
     with pytest.raises(AssertionError):
         quant.rtn(torch.randn(4, 100), 4, 32)
+
+
+def test_hqq_levels_and_not_worse_than_rtn():
+    W = heavy_tailed(seed=1)
+    Q = quant.hqq(W, bits=4, group=32)
+    assert Q.shape == W.shape
+    assert levels_per_group(Q, 32) <= 16
+    e_hqq = (W - Q).abs().mean().item()
+    e_rtn = (W - quant.rtn(W, 4, 32)).abs().mean().item()
+    assert e_hqq <= e_rtn * 1.05
