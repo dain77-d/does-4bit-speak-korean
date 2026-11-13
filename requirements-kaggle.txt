@@ -1,1 +1,2 @@
 datasets>=2.19
+transformers==5.1.0
