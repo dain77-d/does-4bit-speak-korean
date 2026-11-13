@@ -3,3 +3,5 @@ __pycache__/
 .pytest_cache/
 results/**/*.pt
 jobs/
+results/**/*.log
+results/kqt-smoke-*/
