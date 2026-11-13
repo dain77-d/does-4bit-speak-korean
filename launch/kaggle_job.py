@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -38,14 +39,33 @@ def kaggle(*args):
     return r.stdout
 
 
-def wait(slug, poll=60, timeout=6 * 3600):
+STATUS_RE = re.compile(r'"(?:KernelWorkerStatus\.)?(\w+)"')
+
+
+def parse_status(line):
+    m = STATUS_RE.search(line)
+    return m.group(1) if m else ""
+
+
+def wait(slug, poll=60, timeout=6 * 3600, max_fails=5):
     t0 = time.time()
+    fails = 0
     while time.time() - t0 < timeout:
-        status = kaggle("kernels", "status", f"{USER}/{slug}").strip().splitlines()[-1]
-        print(time.strftime("%H:%M:%S"), status, flush=True)
-        if "COMPLETE" in status.upper():
+        try:
+            line = kaggle("kernels", "status", f"{USER}/{slug}").strip().splitlines()[-1]
+        except RuntimeError as e:
+            fails += 1
+            print(e, flush=True)
+            if fails >= max_fails:
+                raise
+            time.sleep(poll)
+            continue
+        fails = 0
+        status = parse_status(line)
+        print(time.strftime("%H:%M:%S"), status or line, flush=True)
+        if status == "COMPLETE":
             return True
-        if "ERROR" in status.upper() or "CANCEL" in status.upper():
+        if status == "ERROR" or status.startswith("CANCEL"):
             return False
         time.sleep(poll)
     raise TimeoutError(slug)
@@ -60,7 +80,10 @@ def main():
     commit = a.commit or subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     run_args = [x for x in a.run_args if x != "--"]
     job = build(ROOT / "jobs" / a.slug, a.slug, commit, run_args)
-    print(kaggle("kernels", "push", "-p", str(job)))
+    pushed = kaggle("kernels", "push", "-p", str(job))
+    if "error" in pushed.lower():
+        raise RuntimeError(f"kernels push reported an error:\n{pushed}")
+    print(pushed)
     ok = wait(a.slug)
     dest = ROOT / "results" / a.slug
     dest.mkdir(parents=True, exist_ok=True)

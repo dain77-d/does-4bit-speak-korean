@@ -19,6 +19,30 @@ def pending(cfgs, out_dir):
     return [c for c in cfgs if not (Path(out_dir) / f"{cfg_id(c)}.json").exists()]
 
 
+def with_baseline(todo, cfgs, out_dir, slug):
+    # the fp16 run writes the reference probabilities; any later config needs them
+    if all((Path(out_dir) / f"base-{slug}-{lang}.pt").exists() for lang in ("ko", "en")):
+        return todo
+    fp16 = next((c for c in cfgs if c["method"] == "fp16"), None)
+    if fp16 is None:
+        return todo
+    return [fp16] + [c for c in todo if c != fp16]
+
+
+def select(cfgs, smoke):
+    if not smoke:
+        return cfgs
+    keep = {("fp16", 16, None), ("rtn", 4, None), ("gptq", 4, "ko")}
+    return [{**c, "smoke": True} for c in cfgs if (c["method"], c["bits"], c["calib_lang"]) in keep]
+
+
+def load_baseline(path, n_items):
+    base = torch.load(path)
+    if base.shape[0] != n_items:
+        raise ValueError(f"{path} has {base.shape[0]} rows, expected {n_items}; stale baseline, delete it and rerun")
+    return base
+
+
 def load_model(name):
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -49,11 +73,9 @@ def main():
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    cfgs = getattr(grids, args.grid)(args.model)
-    if args.smoke:
-        cfgs = [c for c in cfgs if (c["method"], c["bits"], c["calib_lang"]) in
-                {("fp16", 16, None), ("rtn", 4, None), ("gptq", 4, "ko")}]
-    todo = pending(cfgs, out)
+    cfgs = select(getattr(grids, args.grid)(args.model), args.smoke)
+    slug = args.model.split("/")[-1]
+    todo = with_baseline(pending(cfgs, out), cfgs, out, slug)
     if not todo:
         return
     import transformers
@@ -61,7 +83,6 @@ def main():
     model, tok = load_model(args.model)
     orig = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
     d = prepare_data(tok, seed=0, smoke=args.smoke)
-    slug = args.model.split("/")[-1]
     for cfg in todo:
         t0 = time.time()
         torch.manual_seed(cfg["seed"])
@@ -75,7 +96,7 @@ def main():
             if cfg["method"] == "fp16":
                 torch.save(lp, base_path)
             answers = torch.tensor([it["answer"] for it in d[lang]["mcq"]])
-            res[lang] = evaluate.mcq_metrics(lp, answers, torch.load(base_path))
+            res[lang] = evaluate.mcq_metrics(lp, answers, load_baseline(base_path, len(answers)))
             res[lang]["ppl"] = evaluate.perplexity(model, d[lang]["ppl"])
             res[lang]["n_mcq"] = len(answers)
         record = {"cfg": cfg, "id": cfg_id(cfg), "results": res, "seconds": round(time.time() - t0, 1),

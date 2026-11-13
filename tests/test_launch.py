@@ -14,3 +14,11 @@ def test_build_writes_valid_job(tmp_path):
     src = (d / "job.py").read_text()
     compile(src, "job.py", "exec")
     assert "abc123" in src and "Qwen/Qwen2.5-3B-Instruct" in src and "/kaggle/working/out" in src
+
+
+def test_parse_status_extracts_quoted_status():
+    assert kaggle_job.parse_status('dainjuser/x has status "KernelWorkerStatus.COMPLETE"') == "COMPLETE"
+    assert kaggle_job.parse_status('dainjuser/x has status "KernelWorkerStatus.ERROR"') == "ERROR"
+    assert kaggle_job.parse_status('dainjuser/x has status "KernelWorkerStatus.RUNNING"') == "RUNNING"
+    assert kaggle_job.parse_status('dainjuser/kqt-error-run has status "KernelWorkerStatus.RUNNING"') == "RUNNING"
+    assert kaggle_job.parse_status("no status here") == ""

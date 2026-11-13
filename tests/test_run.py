@@ -23,3 +23,27 @@ def test_pending_skips_finished(tmp_path):
     cfgs = grids.e1("m")[:3]
     (tmp_path / f"{run.cfg_id(cfgs[1])}.json").write_text(json.dumps({"done": True}))
     assert run.pending(cfgs, tmp_path) == [cfgs[0], cfgs[2]]
+
+
+def test_missing_baseline_puts_fp16_first(tmp_path):
+    cfgs = grids.e1("m")
+    (tmp_path / f"{run.cfg_id(cfgs[0])}.json").write_text(json.dumps({"done": True}))
+    todo = run.pending(cfgs, tmp_path)
+    assert cfgs[0] not in todo
+    assert run.with_baseline(todo, cfgs, tmp_path, "m")[0] == cfgs[0]
+
+
+def test_present_baseline_leaves_todo_unchanged(tmp_path):
+    cfgs = grids.e1("m")
+    for lang in ("ko", "en"):
+        (tmp_path / f"base-m-{lang}.pt").write_bytes(b"")
+    todo = run.pending(cfgs, tmp_path)
+    assert run.with_baseline(todo, cfgs, tmp_path, "m") == todo
+
+
+def test_smoke_cfgs_marked_and_get_distinct_ids():
+    full = grids.e1("m")
+    smoke = run.select(full, smoke=True)
+    assert len(smoke) == 3 and all(c["smoke"] is True for c in smoke)
+    assert {run.cfg_id(c) for c in smoke}.isdisjoint({run.cfg_id(c) for c in full})
+    assert run.select(full, smoke=False) == full
