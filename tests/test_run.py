@@ -1,4 +1,6 @@
 import json
+import sys
+from pathlib import Path
 
 from kqt import grids
 import run
@@ -47,3 +49,18 @@ def test_smoke_cfgs_marked_and_get_distinct_ids():
     assert len(smoke) == 3 and all(c["smoke"] is True for c in smoke)
     assert {run.cfg_id(c) for c in smoke}.isdisjoint({run.cfg_id(c) for c in full})
     assert run.select(full, smoke=False) == full
+
+
+def test_tax_table():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from analysis.e1_summary import tax_table
+
+    def rec(method, bits, ko_flip, en_flip, ko_ppl, en_ppl):
+        r = lambda f, p: {"acc": 0.5, "flip": f, "kl": f / 10, "ppl": p, "n_mcq": 100}
+        return {"cfg": {"model": "m", "method": method, "bits": bits, "calib_lang": None},
+                "results": {"ko": r(ko_flip, ko_ppl), "en": r(en_flip, en_ppl)}}
+
+    df = tax_table([rec("fp16", 16, 0, 0, 10, 5), rec("rtn", 4, 0.2, 0.1, 12, 5.5)])
+    row = df[df.method == "rtn"].iloc[0]
+    assert abs(row.flip_tax - 2.0) < 1e-9
+    assert abs(row.ko_ppl_ratio - 1.2) < 1e-9 and abs(row.en_ppl_ratio - 1.1) < 1e-9
