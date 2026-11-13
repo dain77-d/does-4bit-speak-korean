@@ -13,6 +13,7 @@ def test_build_writes_valid_job(tmp_path):
     assert meta["enable_gpu"] and meta["enable_internet"] and meta["is_private"]
     src = (d / "job.py").read_text()
     compile(src, "job.py", "exec")
+    assert '"KQT_COMMIT": "abc123"' in src and "import os" in src
     assert "abc123" in src and "Qwen/Qwen2.5-3B-Instruct" in src and "/kaggle/working/out" in src
 
 

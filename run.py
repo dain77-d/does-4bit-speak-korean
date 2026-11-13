@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 import time
 from pathlib import Path
 
@@ -9,6 +10,15 @@ import torch
 
 from kqt import data, evaluate, grids
 from kqt.model import quantize_model
+
+
+REVISIONS = {"Qwen/Qwen2.5-3B-Instruct": "aa8e72537993ba99e69dfaafa59ed015b17504d1",
+             "LGAI-EXAONE/EXAONE-3.5-2.4B-Instruct": "ccce25bd39c141fe053e0bc75818a8f5fe962802"}
+
+
+def avg_bits(cfg):
+    # one fp16 scale + one fp16 zero per group
+    return 16 if cfg["method"] == "fp16" else cfg["bits"] + 32 / cfg["group"]
 
 
 def cfg_id(cfg):
@@ -46,9 +56,9 @@ def load_baseline(path, n_items):
 def load_model(name):
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    tok = AutoTokenizer.from_pretrained(name, trust_remote_code=True)
+    tok = AutoTokenizer.from_pretrained(name, revision=REVISIONS.get(name), trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
-        name, torch_dtype=torch.float16, trust_remote_code=True,
+        name, revision=REVISIONS.get(name), torch_dtype=torch.float16, trust_remote_code=True,
         device_map="cuda" if torch.cuda.is_available() else None).eval()
     return model, tok
 
@@ -57,7 +67,7 @@ def prepare_data(tok, seed, smoke):
     n_calib, n_ppl, n_mcq = (8, 2, 5) if smoke else (128, 32, 100)
     out = {}
     for lang in ("ko", "en"):
-        _, calib, ev = data.split_docs(data.load_wiki(lang, 300 if smoke else 3000), seed)
+        _, calib, ev = data.split_docs(data.load_wiki(lang, 300 if smoke else data.WIKI_DOCS), seed)
         out[lang] = {"calib": data.chunk_tokens(calib, tok, n_calib, 512),
                      "ppl": data.chunk_tokens(ev, tok, n_ppl, 512),
                      "mcq": data.load_mcq(lang, n_mcq, seed)}
@@ -79,6 +89,11 @@ def main():
     if not todo:
         return
     import transformers
+    try:
+        import datasets
+        datasets_version = datasets.__version__
+    except ImportError:
+        datasets_version = None
 
     model, tok = load_model(args.model)
     orig = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
@@ -92,6 +107,7 @@ def main():
         res = {}
         for lang in ("ko", "en"):
             lp = evaluate.mcq_logprobs(model, tok, d[lang]["mcq"], lang)
+            torch.save(lp, out / f"lp-{cfg_id(cfg)}-{lang}.pt")
             base_path = out / f"base-{slug}-{lang}.pt"
             if cfg["method"] == "fp16":
                 torch.save(lp, base_path)
@@ -100,7 +116,8 @@ def main():
             res[lang]["ppl"] = evaluate.perplexity(model, d[lang]["ppl"])
             res[lang]["n_mcq"] = len(answers)
         record = {"cfg": cfg, "id": cfg_id(cfg), "results": res, "seconds": round(time.time() - t0, 1),
-                  "torch": torch.__version__, "transformers": transformers.__version__,
+                  "revision": REVISIONS.get(args.model), "git_commit": os.environ.get("KQT_COMMIT"),
+                  "avg_bits": avg_bits(cfg), "datasets": datasets_version, "torch": torch.__version__, "transformers": transformers.__version__,
                   "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu"}
         (out / f"{cfg_id(cfg)}.json").write_text(json.dumps(record, indent=1, ensure_ascii=False))
         print(json.dumps({"id": record["id"], **{k: cfg[k] for k in ("method", "bits", "calib_lang")}, **res}))

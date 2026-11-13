@@ -1,4 +1,5 @@
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -60,7 +61,16 @@ def test_tax_table():
         return {"cfg": {"model": "m", "method": method, "bits": bits, "calib_lang": None},
                 "results": {"ko": r(ko_flip, ko_ppl), "en": r(en_flip, en_ppl)}}
 
-    df = tax_table([rec("fp16", 16, 0, 0, 10, 5), rec("rtn", 4, 0.2, 0.1, 12, 5.5)])
-    row = df[df.method == "rtn"].iloc[0]
+    df = tax_table([rec("fp16", 16, 0, 0, 10, 5), rec("rtn", 4, 0.2, 0.1, 12, 5.5), rec("rtn", 3, 0.2, 0.05, 12, 5.5)])
+    row = df[(df.method == "rtn") & (df.bits == 4)].iloc[0]
     assert abs(row.flip_tax - 2.0) < 1e-9
+    assert row.ko_n == 100 and row.ko_flip_lo < 0.2 < row.ko_flip_hi
+    assert abs(row.ko_acc_drop) < 1e-9 and abs(row.ko_fp16_acc - 0.5) < 1e-9
+    assert math.isnan(df[(df.method == "rtn") & (df.bits == 3)].iloc[0].flip_tax)  # 5 English flips < 10
     assert abs(row.ko_ppl_ratio - 1.2) < 1e-9 and abs(row.en_ppl_ratio - 1.1) < 1e-9
+
+
+def test_avg_bits():
+    assert run.avg_bits({"method": "fp16", "bits": 16, "group": None}) == 16
+    assert run.avg_bits({"method": "rtn", "bits": 4, "group": 128}) == 4.25
+    assert run.avg_bits({"method": "rtn", "bits": 3, "group": 64}) == 3.5

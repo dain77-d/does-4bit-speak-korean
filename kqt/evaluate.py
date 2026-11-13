@@ -29,7 +29,10 @@ def mcq_logprobs(model, tok, items, lang, batch_size=8):
         pos = (enc["attention_mask"].cumsum(-1) - 1).clamp(min=0)
         logits = model(input_ids=enc["input_ids"], attention_mask=enc["attention_mask"], position_ids=pos).logits
         out.append(F.log_softmax(logits[:, -1, ids].float(), dim=-1).cpu())
-    return torch.cat(out)
+    lp = torch.cat(out)
+    if not torch.isfinite(lp).all():
+        raise FloatingPointError(f"non-finite MCQ log-probs ({lang}): the quantized model produced NaN/inf")
+    return lp
 
 
 def mcq_metrics(lp, answers, base_lp=None):
@@ -50,4 +53,6 @@ def perplexity(model, chunks, batch_size=4):
         logits = model(x).logits[:, :-1].float()
         nll += F.cross_entropy(logits.reshape(-1, logits.shape[-1]), x[:, 1:].reshape(-1), reduction="sum").item()
         n += x[:, 1:].numel()
+    if not math.isfinite(nll):
+        raise FloatingPointError("non-finite perplexity: the quantized model produced NaN/inf")
     return math.exp(nll / n)

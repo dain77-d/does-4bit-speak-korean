@@ -12,11 +12,12 @@ USER = "dainjuser"
 REPO = "https://github.com/dain77-d/does-4bit-speak-korean"
 ROOT = Path(__file__).resolve().parents[1]
 
-SCRIPT = """import subprocess, sys
+SCRIPT = """import os, subprocess, sys
 subprocess.run(["git", "clone", "-q", "{repo}", "/tmp/src"], check=True)
 subprocess.run(["git", "-C", "/tmp/src", "checkout", "-q", "{commit}"], check=True)
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", "/tmp/src/requirements-kaggle.txt"], check=True)
-subprocess.run([sys.executable, "run.py", {args}, "--out", "/kaggle/working/out"], cwd="/tmp/src", check=True)
+subprocess.run([sys.executable, "run.py", {args}, "--out", "/kaggle/working/out"], cwd="/tmp/src", check=True,
+               env={{**os.environ, "KQT_COMMIT": "{commit}"}})
 """
 
 

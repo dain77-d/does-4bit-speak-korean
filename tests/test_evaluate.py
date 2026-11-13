@@ -1,5 +1,6 @@
 import math
 
+import pytest
 import torch
 
 from conftest import FakeTok
@@ -38,3 +39,12 @@ def test_perplexity_finite_and_matches_uniform_bound(tiny_model):
     x = torch.randint(2, 100, (3, 20))
     ppl = evaluate.perplexity(tiny_model, x, batch_size=2)
     assert math.isfinite(ppl) and 1 < ppl < 1000
+
+
+def test_nan_guards(tiny_model):
+    with torch.no_grad():
+        tiny_model.lm_head.weight.fill_(float("nan"))
+    with pytest.raises(FloatingPointError):
+        evaluate.mcq_logprobs(tiny_model, FakeTok(), ITEMS, "ko")
+    with pytest.raises(FloatingPointError):
+        evaluate.perplexity(tiny_model, torch.randint(2, 100, (2, 20)))

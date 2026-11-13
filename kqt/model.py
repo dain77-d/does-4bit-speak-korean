@@ -106,7 +106,7 @@ def quantize_model(model, method, bits, group=128, calib_ids=None, x_sample=512)
             layer(x, **kw)
         for h in handles:
             h.remove()
-        # ponytail: all Linears in a block see FP inputs (not true-sequential GPTQ); upgrade if the gap matters.
+        # ponytail: all Linears in a block see FP inputs (GPTQ is not true-sequential, no act_order); upgrade if the gap matters.
         for n, m in lins.items():
             st = stats[n]
             if method == "gptq":

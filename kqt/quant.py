@@ -88,7 +88,7 @@ def gptq(W: torch.Tensor, H: torch.Tensor, bits: int, group: int = 128, percdamp
 
 
 def awq(W: torch.Tensor, act_mean: torch.Tensor, X: torch.Tensor, bits: int, group: int = 128, grid: int = 20):
-    """AWQ-style search (Lin et al. 2024): s = mean|x|^a per input channel, quantize W*s, fold 1/s back.
+    """AWQ-style (per-Linear scale search, no clipping search; not deployable AWQ; Lin et al. 2024): s = mean|x|^a per input channel, quantize W*s, fold 1/s back.
     a=0 is plain RTN, so the result is never worse than RTN on X."""
     Wf, Xf = W.float(), X.float()
     ref = Xf @ Wf.T
