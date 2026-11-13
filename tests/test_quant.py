@@ -67,3 +67,13 @@ def test_gptq_handles_dead_inputs():
     X[:, 5] = 0
     Q = quant.gptq(W, 2 * X.T @ X / X.shape[0], bits=4, group=32)
     assert torch.isfinite(Q).all()
+
+
+def test_awq_never_worse_than_rtn_on_its_sample():
+    W = heavy_tailed(seed=5)
+    X = correlated_inputs(seed=6)
+    X[:, :4] *= 10  # salient input channels
+    Q = quant.awq(W, X.abs().mean(0), X, bits=3, group=32)
+    out_err = lambda Wq: (X @ (W - Wq).T).pow(2).mean().item()
+    assert out_err(Q) <= out_err(quant.rtn(W, 3, 32)) + 1e-6
+    assert Q.shape == W.shape

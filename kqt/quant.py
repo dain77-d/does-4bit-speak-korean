@@ -85,3 +85,19 @@ def gptq(W: torch.Tensor, H: torch.Tensor, bits: int, group: int = 128, percdamp
             Err1[:, i] = err[:, 0]
         W[:, i2:] -= Err1 @ Hinv[i1:i2, i2:]
     return Q.to(dtype)
+
+
+def awq(W: torch.Tensor, act_mean: torch.Tensor, X: torch.Tensor, bits: int, group: int = 128, grid: int = 20):
+    """AWQ-style search (Lin et al. 2024): s = mean|x|^a per input channel, quantize W*s, fold 1/s back.
+    a=0 is plain RTN, so the result is never worse than RTN on X."""
+    Wf, Xf = W.float(), X.float()
+    ref = Xf @ Wf.T
+    best_err, best = float("inf"), None
+    for k in range(grid):
+        s = act_mean.float().clamp(min=1e-5).pow(k / grid)
+        s = s / (s.max() * s.min()).sqrt()
+        Wq = rtn(Wf * s, bits, group) / s
+        err = ((Xf @ Wq.T - ref) ** 2).mean().item()
+        if err < best_err:
+            best_err, best = err, Wq
+    return best.to(W.dtype)
