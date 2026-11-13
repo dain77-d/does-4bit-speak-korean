@@ -1,0 +1,31 @@
+{
+ "cfg": {
+  "model": "LGAI-EXAONE/EXAONE-3.5-2.4B-Instruct",
+  "method": "fp16",
+  "bits": 16,
+  "group": 128,
+  "calib_lang": null,
+  "seed": 0
+ },
+ "id": "8a4ff2a77e2b",
+ "results": {
+  "ko": {
+   "acc": 0.4020000100135803,
+   "flip": 0.0,
+   "kl": 0.0,
+   "ppl": 6.12694739090743,
+   "n_mcq": 1000
+  },
+  "en": {
+   "acc": 0.5429999828338623,
+   "flip": 0.0,
+   "kl": 0.0,
+   "ppl": 15.806547631133068,
+   "n_mcq": 1000
+  }
+ },
+ "seconds": 137.7,
+ "torch": "2.11.0+cu130",
+ "transformers": "5.1.0",
+ "gpu": "Tesla T4"
+}

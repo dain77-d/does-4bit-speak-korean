@@ -1,0 +1,31 @@
+{
+ "cfg": {
+  "model": "Qwen/Qwen2.5-3B-Instruct",
+  "method": "gptq",
+  "bits": 4,
+  "group": 128,
+  "calib_lang": "ko",
+  "seed": 0
+ },
+ "id": "e1abbef0cd1b",
+ "results": {
+  "ko": {
+   "acc": 0.4059999883174896,
+   "flip": 0.125,
+   "kl": 0.14310713112354279,
+   "ppl": 5.293124559366722,
+   "n_mcq": 1000
+  },
+  "en": {
+   "acc": 0.5920000076293945,
+   "flip": 0.13899999856948853,
+   "kl": 0.18174853920936584,
+   "ppl": 13.886728206059601,
+   "n_mcq": 1000
+  }
+ },
+ "seconds": 711.3,
+ "torch": "2.11.0+cu130",
+ "transformers": "5.1.0",
+ "gpu": "Tesla T4"
+}
